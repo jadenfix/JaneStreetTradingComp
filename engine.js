@@ -1,9 +1,126 @@
-const integer=(v,min,max)=>Number.isInteger(v)&&v>=min&&v<=max;
-export function create(config={seed:42,limit:20,volatility:30}){if(!integer(config.seed,1,4294967295)||!integer(config.limit,1,1000)||!integer(config.volatility,0,500))throw Error('Invalid seed, inventory limit, or volatility.');return {config:{...config},rng:config.seed>>>0,mid:10000,cash:10000000,initialCash:10000000,inventory:0,tick:0,nextId:1,orders:[],fills:[],history:[10000],actions:[]};}
-function random(s){s.rng=(Math.imul(1664525,s.rng)+1013904223)>>>0;return s.rng/4294967296;}
-export function place(s,side,price,quantity){if(!['buy','sell'].includes(side)||!integer(price,1,10000000)||!integer(quantity,1,1000))throw Error('Use a valid side, cent price, and whole quantity.');const pending=s.orders.filter(o=>o.side===side).reduce((a,o)=>a+o.quantity,0);if(side==='buy'&&s.inventory+pending+quantity>s.config.limit||side==='sell'&&s.inventory-pending-quantity< -s.config.limit)throw Error('Order exceeds the worst-case inventory limit.');if(s.orders.some(o=>o.side!==side&&(side==='buy'?price>=o.price:price<=o.price)))throw Error('Quote would cross your own book. Cancel the opposing order first.');const o={id:s.nextId++,side,price,quantity};s.orders.push(o);s.actions.push({type:'place',side,price,quantity});return o;}
-export function cancel(s,id){s.orders=id==null?[]:s.orders.filter(o=>o.id!==id);s.actions.push({type:'cancel',id:id??null});}
-export function match(s,side,quantity,limitPrice){const eligible=s.orders.filter(o=>o.side===side&&(side==='buy'?o.price>=limitPrice:o.price<=limitPrice)).sort((a,b)=>(side==='buy'?b.price-a.price:a.price-b.price)||a.id-b.id);for(const o of eligible){if(!quantity)break;const qty=Math.min(quantity,o.quantity);o.quantity-=qty;quantity-=qty;s.inventory+=side==='buy'?qty:-qty;s.cash+=(side==='buy'?-1:1)*qty*o.price;s.fills.push({tick:s.tick,side,quantity:qty,price:o.price,inventory:s.inventory});}s.orders=s.orders.filter(o=>o.quantity>0);return quantity;}
-export function step(s){if(s.tick>=10000)throw Error('Session reached 10,000 ticks. Start a new session.');s.tick++;s.mid=Math.max(1,s.mid+Math.round((random(s)*2-1)*s.config.volatility));const side=random(s)<.5?'buy':'sell';const qty=1+Math.floor(random(s)*8);const tolerance=Math.floor(random(s)*100);match(s,side,qty,side==='buy'?Math.max(1,s.mid-tolerance):s.mid+tolerance);s.history.push(s.mid);s.actions.push({type:'step'});return s;}
-export function equity(s){return s.cash+s.inventory*s.mid;}
-export function replay(config,actions){if(!Array.isArray(actions)||actions.length>30000)throw Error('Invalid action tape.');const s=create(config);for(const a of actions){if(a.type==='place')place(s,a.side,a.price,a.quantity);else if(a.type==='step')step(s);else if(a.type==='cancel')cancel(s,a.id);else throw Error('Unknown replay action.');}return s;}
+const integer = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+export function create(config = { seed: 42, limit: 20, volatility: 30 }) {
+  if (
+    !integer(config.seed, 1, 4294967295) ||
+    !integer(config.limit, 1, 1000) ||
+    !integer(config.volatility, 0, 500)
+  )
+    throw Error("Invalid seed, inventory limit, or volatility.");
+  return {
+    config: { ...config },
+    rng: config.seed >>> 0,
+    mid: 10000,
+    cash: 10000000,
+    initialCash: 10000000,
+    inventory: 0,
+    tick: 0,
+    nextId: 1,
+    orders: [],
+    fills: [],
+    history: [10000],
+    actions: [],
+  };
+}
+function random(s) {
+  s.rng = (Math.imul(1664525, s.rng) + 1013904223) >>> 0;
+  return s.rng / 4294967296;
+}
+export function place(s, side, price, quantity) {
+  if (
+    !["buy", "sell"].includes(side) ||
+    !integer(price, 1, 10000000) ||
+    !integer(quantity, 1, 1000)
+  )
+    throw Error("Use a valid side, cent price, and whole quantity.");
+  const pending = s.orders
+    .filter((o) => o.side === side)
+    .reduce((a, o) => a + o.quantity, 0);
+  if (
+    (side === "buy" && s.inventory + pending + quantity > s.config.limit) ||
+    (side === "sell" && s.inventory - pending - quantity < -s.config.limit)
+  )
+    throw Error("Order exceeds the worst-case inventory limit.");
+  if (
+    s.orders.some(
+      (o) =>
+        o.side !== side &&
+        (side === "buy" ? price >= o.price : price <= o.price),
+    )
+  )
+    throw Error(
+      "Quote would cross your own book. Cancel the opposing order first.",
+    );
+  const o = { id: s.nextId++, side, price, quantity };
+  s.orders.push(o);
+  s.actions.push({ type: "place", side, price, quantity });
+  return o;
+}
+export function cancel(s, id) {
+  s.orders = id == null ? [] : s.orders.filter((o) => o.id !== id);
+  s.actions.push({ type: "cancel", id: id ?? null });
+}
+export function match(s, side, quantity, limitPrice) {
+  const eligible = s.orders
+    .filter(
+      (o) =>
+        o.side === side &&
+        (side === "buy" ? o.price >= limitPrice : o.price <= limitPrice),
+    )
+    .sort(
+      (a, b) =>
+        (side === "buy" ? b.price - a.price : a.price - b.price) || a.id - b.id,
+    );
+  for (const o of eligible) {
+    if (!quantity) break;
+    const qty = Math.min(quantity, o.quantity);
+    o.quantity -= qty;
+    quantity -= qty;
+    s.inventory += side === "buy" ? qty : -qty;
+    s.cash += (side === "buy" ? -1 : 1) * qty * o.price;
+    s.fills.push({
+      tick: s.tick,
+      side,
+      quantity: qty,
+      price: o.price,
+      inventory: s.inventory,
+    });
+  }
+  s.orders = s.orders.filter((o) => o.quantity > 0);
+  return quantity;
+}
+export function step(s) {
+  if (s.tick >= 10000)
+    throw Error("Session reached 10,000 ticks. Start a new session.");
+  s.tick++;
+  s.mid = Math.max(
+    1,
+    s.mid + Math.round((random(s) * 2 - 1) * s.config.volatility),
+  );
+  const side = random(s) < 0.5 ? "buy" : "sell";
+  const qty = 1 + Math.floor(random(s) * 8);
+  const tolerance = Math.floor(random(s) * 100);
+  match(
+    s,
+    side,
+    qty,
+    side === "buy" ? Math.max(1, s.mid - tolerance) : s.mid + tolerance,
+  );
+  s.history.push(s.mid);
+  s.actions.push({ type: "step" });
+  return s;
+}
+export function equity(s) {
+  return s.cash + s.inventory * s.mid;
+}
+export function replay(config, actions) {
+  if (!Array.isArray(actions) || actions.length > 30000)
+    throw Error("Invalid action tape.");
+  const s = create(config);
+  for (const a of actions) {
+    if (a.type === "place") place(s, a.side, a.price, a.quantity);
+    else if (a.type === "step") step(s);
+    else if (a.type === "cancel") cancel(s, a.id);
+    else throw Error("Unknown replay action.");
+  }
+  return s;
+}

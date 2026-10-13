@@ -1,1 +1,181 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0c1120"><meta name="description" content="Explore spread capture, inventory exposure, and mark-to-market P&amp;L in a seeded single-asset simulation. Place quotes, advance the tape, and see every fill."><title>Market Lab — educational market making</title><link rel="stylesheet" href="./style.css"></head><body><header><div class="brand">▥ market lab</div><span class="tag">LOCAL WORKSPACE · NO ACCOUNT</span></header><main><div class="eyebrow">EXPERIMENT / OBSERVE / REPLAY</div><h1>A market you can<br>take apart.</h1><p class="intro">Explore spread capture, inventory exposure, and mark-to-market P&amp;L in a seeded single-asset simulation. Place quotes, advance the tape, and see every fill.</p><div class="notice">Educational synthetic market. Unaffiliated with Jane Street; no real orders, market data, competition scoring, or investment recommendations. P&amp;L is simulated.</div><div class="stats"><div class="card"><p>MIDPRICE</p><div id="mid" class="metric"></div></div><div class="card"><p>INVENTORY</p><div id="inventory" class="metric"></div></div><div class="card"><p>MARK-TO-MARKET P&amp;L</p><div id="pnl" class="metric"></div></div></div><div class="workspace"><aside class="panel"><h2>Session controls</h2><form id="settings"><label>Random seed<input name="seed" type="number" min="1" max="4294967295" value="42" required></label><label>Inventory limit (units)<input name="limit" type="number" min="1" max="1000" value="20" required></label><label>Volatility (cents / tick)<input name="volatility" type="number" min="0" max="500" value="30" required></label><button class="secondary">Start new session</button></form><hr style="border:0;border-top:1px solid #33415b;margin:24px 0"><form id="quote"><h2>Place a limit order</h2><label>Side<select name="side"><option value="buy">Buy</option><option value="sell">Sell</option></select></label><label>Limit price ($)<input name="price" type="number" min="0.01" max="100000" step="0.01" value="99.75" required></label><label>Quantity<input name="quantity" type="number" min="1" max="1000" value="5" required></label><button>Place order</button></form><div class="toolbar"><button id="step">Next tick →</button><button id="run" class="secondary">Run 20 ticks</button><button id="cancel" class="secondary">Cancel all</button><button id="replay" class="secondary">Replay session</button><button id="export" class="secondary">Export replay</button></div></aside><section><div class="panel"><div class="row"><h2>Synthetic price tape</h2><span id="tick" class="chip"></span></div><svg id="chart" class="chart" viewBox="0 0 600 170" role="img" aria-label="Synthetic midprice history"></svg><p class="small">Cash <strong id="cash"></strong> · Equity <strong id="equity"></strong> · Green line: synthetic midprice. P&amp;L = cash + inventory × midprice − initial cash.</p></div><div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-top:24px"><div class="panel"><h2>Your resting bids</h2><div id="bids"></div></div><div class="panel"><h2>Your resting asks</h2><div id="asks"></div></div></div><div class="panel" style="margin-top:24px"><h2>Fill ledger</h2><div class="tablewrap"><table><thead><tr><th>Tick</th><th>Side</th><th>Qty</th><th>Price</th><th>Inventory after</th></tr></thead><tbody id="fills"></tbody></table></div><p class="small">Each tick moves the synthetic midprice and sends one seeded external market order against your best eligible quotes. Price then time priority; partial fills supported. No fees, funding, competing makers, or real market impact.</p></div></section></div><p id="status" class="status" role="status" aria-live="polite"></p></main><footer>Sessions persist locally. Reload to resume. Replay reconstructs every action from the seed; export preserves the action tape.</footer><script type="module" src="./app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#0c1120" />
+    <meta
+      name="description"
+      content="Explore spread capture, inventory exposure, and mark-to-market P&amp;L in a seeded single-asset simulation. Place quotes, advance the tape, and see every fill."
+    />
+    <title>Market Lab — educational market making</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">▥ market lab</div>
+      <span class="tag">LOCAL WORKSPACE · NO ACCOUNT</span>
+    </header>
+    <main>
+      <div class="eyebrow">EXPERIMENT / OBSERVE / REPLAY</div>
+      <h1>A market you can<br />take apart.</h1>
+      <p class="intro">
+        Explore spread capture, inventory exposure, and mark-to-market P&amp;L
+        in a seeded single-asset simulation. Place quotes, advance the tape, and
+        see every fill.
+      </p>
+      <div class="notice">
+        Educational synthetic market. Unaffiliated with Jane Street; no real
+        orders, market data, competition scoring, or investment recommendations.
+        P&amp;L is simulated.
+      </div>
+      <div class="stats">
+        <div class="card">
+          <p>MIDPRICE</p>
+          <div id="mid" class="metric"></div>
+        </div>
+        <div class="card">
+          <p>INVENTORY</p>
+          <div id="inventory" class="metric"></div>
+        </div>
+        <div class="card">
+          <p>MARK-TO-MARKET P&amp;L</p>
+          <div id="pnl" class="metric"></div>
+        </div>
+      </div>
+      <div class="workspace">
+        <aside class="panel">
+          <h2>Session controls</h2>
+          <form id="settings">
+            <label
+              >Random seed<input
+                name="seed"
+                type="number"
+                min="1"
+                max="4294967295"
+                value="42"
+                required /></label
+            ><label
+              >Inventory limit (units)<input
+                name="limit"
+                type="number"
+                min="1"
+                max="1000"
+                value="20"
+                required /></label
+            ><label
+              >Volatility (cents / tick)<input
+                name="volatility"
+                type="number"
+                min="0"
+                max="500"
+                value="30"
+                required /></label
+            ><button class="secondary">Start new session</button>
+          </form>
+          <hr
+            style="border: 0; border-top: 1px solid #33415b; margin: 24px 0"
+          />
+          <form id="quote">
+            <h2>Place a limit order</h2>
+            <label
+              >Side<select name="side">
+                <option value="buy">Buy</option>
+                <option value="sell">Sell</option>
+              </select></label
+            ><label
+              >Limit price ($)<input
+                name="price"
+                type="number"
+                min="0.01"
+                max="100000"
+                step="0.01"
+                value="99.75"
+                required /></label
+            ><label
+              >Quantity<input
+                name="quantity"
+                type="number"
+                min="1"
+                max="1000"
+                value="5"
+                required /></label
+            ><button>Place order</button>
+          </form>
+          <div class="toolbar">
+            <button id="step">Next tick →</button
+            ><button id="run" class="secondary">Run 20 ticks</button
+            ><button id="cancel" class="secondary">Cancel all</button
+            ><button id="replay" class="secondary">Replay session</button
+            ><button id="export" class="secondary">Export replay</button>
+          </div>
+        </aside>
+        <section>
+          <div class="panel">
+            <div class="row">
+              <h2>Synthetic price tape</h2>
+              <span id="tick" class="chip"></span>
+            </div>
+            <svg
+              id="chart"
+              class="chart"
+              viewBox="0 0 600 170"
+              role="img"
+              aria-label="Synthetic midprice history"
+            ></svg>
+            <p class="small">
+              Cash <strong id="cash"></strong> · Equity
+              <strong id="equity"></strong> · Green line: synthetic midprice.
+              P&amp;L = cash + inventory × midprice − initial cash.
+            </p>
+          </div>
+          <div
+            class="grid"
+            style="
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              margin-top: 24px;
+            "
+          >
+            <div class="panel">
+              <h2>Your resting bids</h2>
+              <div id="bids"></div>
+            </div>
+            <div class="panel">
+              <h2>Your resting asks</h2>
+              <div id="asks"></div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top: 24px">
+            <h2>Fill ledger</h2>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tick</th>
+                    <th>Side</th>
+                    <th>Qty</th>
+                    <th>Price</th>
+                    <th>Inventory after</th>
+                  </tr>
+                </thead>
+                <tbody id="fills"></tbody>
+              </table>
+            </div>
+            <p class="small">
+              Each tick moves the synthetic midprice and sends one seeded
+              external market order against your best eligible quotes. Price
+              then time priority; partial fills supported. No fees, funding,
+              competing makers, or real market impact.
+            </p>
+          </div>
+        </section>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+    <footer>
+      Sessions persist locally. Reload to resume. Replay reconstructs every
+      action from the seed; export preserves the action tape.
+    </footer>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
