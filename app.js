@@ -1,0 +1,134 @@
+import { $, load, save, download, announce } from "./shared.js";
+import { create, place, cancel, step, equity, replay } from "./engine.js";
+let state;
+const backup = load("marketlab.v1", null);
+try {
+  state = backup ? replay(backup.config, backup.actions) : create();
+} catch {
+  state = create();
+  announce("Stored session was invalid. A fresh session is ready.");
+}
+const money = (c) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+    c / 100,
+  );
+function persist() {
+  save("marketlab.v1", { config: state.config, actions: state.actions });
+}
+function render() {
+  for (const [k, v] of Object.entries(state.config))
+    $("settings").elements[k].value = v;
+  $("mid").textContent = money(state.mid);
+  $("inventory").textContent = state.inventory + " / " + state.config.limit;
+  const pnl = equity(state) - state.initialCash;
+  $("pnl").textContent = money(pnl);
+  $("pnl").className = "metric " + (pnl < 0 ? "negative" : "positive");
+  $("cash").textContent = money(state.cash);
+  $("equity").textContent = money(equity(state));
+  $("tick").textContent = "TICK " + state.tick;
+  for (const [id, side] of [
+    ["bids", "buy"],
+    ["asks", "sell"],
+  ]) {
+    const orders = state.orders
+      .filter((o) => o.side === side)
+      .sort(
+        (a, b) =>
+          (side === "buy" ? b.price - a.price : a.price - b.price) ||
+          a.id - b.id,
+      );
+    $(id).innerHTML = orders.length
+      ? orders
+          .map(
+            (o) =>
+              `<div class="row mono"><span>${o.quantity} × ${money(o.price)}</span><button class="secondary" data-cancel="${o.id}" aria-label="Cancel order ${o.id}">×</button></div>`,
+          )
+          .join("")
+      : '<p class="small">No resting orders</p>';
+  }
+  $("fills").innerHTML =
+    state.fills
+      .slice(-50)
+      .reverse()
+      .map(
+        (f) =>
+          `<tr><td>${f.tick}</td><td class="${f.side === "buy" ? "positive" : "negative"}">${f.side}</td><td>${f.quantity}</td><td>${money(f.price)}</td><td>${f.inventory}</td></tr>`,
+      )
+      .join("") ||
+    '<tr><td colspan="5">No fills yet. Place a quote near the midprice, then advance the tape.</td></tr>';
+  const h = state.history.slice(-100),
+    lo = Math.min(...h) - 10,
+    hi = Math.max(...h) + 10;
+  const points = h
+    .map(
+      (v, i) =>
+        `${20 + (i * 560) / Math.max(1, h.length - 1)},${150 - ((v - lo) * 130) / (hi - lo)}`,
+    )
+    .join(" ");
+  $("chart").innerHTML =
+    `<path d="M20 150H580M20 85H580M20 20H580" stroke="#2a3850" fill="none"/><polyline points="${points}" fill="none" stroke="#91f0ca" stroke-width="3"/><text x="20" y="168" fill="#a1adc3" font-size="11">Last ${h.length} observations · ${money(lo)}–${money(hi)}</text>`;
+}
+function action(fn, msg) {
+  try {
+    fn();
+    persist();
+    render();
+    announce(msg);
+  } catch (err) {
+    announce(err.message);
+  }
+}
+$("settings").onsubmit = (e) => {
+  e.preventDefault();
+  if (!confirm("Start a new session and discard this action tape?")) return;
+  action(() => {
+    state = create(
+      Object.fromEntries(
+        [...new FormData(e.target)].map(([k, v]) => [k, Number(v)]),
+      ),
+    );
+  }, "New seeded session ready.");
+};
+$("quote").onsubmit = (e) => {
+  e.preventDefault();
+  const v = Object.fromEntries(new FormData(e.target));
+  action(
+    () =>
+      place(
+        state,
+        v.side,
+        Math.round(Number(v.price) * 100),
+        Number(v.quantity),
+      ),
+    "Limit order placed.",
+  );
+};
+$("step").onclick = () => action(() => step(state), "Tape advanced one tick.");
+$("run").onclick = () =>
+  action(() => {
+    for (let i = 0; i < 20; i++) step(state);
+  }, "Tape advanced twenty ticks.");
+$("cancel").onclick = () => action(() => cancel(state), "All orders canceled.");
+for (const id of ["bids", "asks"])
+  $(id).onclick = (e) => {
+    const b = e.target.closest("[data-cancel]");
+    if (b)
+      action(() => cancel(state, Number(b.dataset.cancel)), "Order canceled.");
+  };
+$("replay").onclick = () =>
+  action(() => {
+    state = replay(state.config, state.actions);
+  }, "Seeded replay reproduced the session.");
+$("export").onclick = () =>
+  download("marketlab-replay.json", {
+    version: 1,
+    config: state.config,
+    actions: state.actions,
+    summary: {
+      tick: state.tick,
+      inventory: state.inventory,
+      cash: state.cash,
+      equity: equity(state),
+    },
+  });
+render();
